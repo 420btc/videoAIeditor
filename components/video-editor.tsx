@@ -7,6 +7,8 @@ import { VideoPlayer } from "./video-player"
 import { MultiTrackTimeline } from "./multi-track-timeline"
 import { Sidebar } from "./sidebar"
 import { AIAssistantPanel } from "./ai-assistant-panel"
+// import { TextOverlayPanel } from "./text-overlay-panel" // Removed
+// import { TextOverlay } from "@/types/text-overlay" // Removed
 
 interface VideoMetadata {
   filename: string
@@ -53,14 +55,19 @@ interface TimelineClip {
 export default function VideoEditor() {
   const [videoFile, setVideoFile] = useState<File | null>(null)
   const [videoMetadata, setVideoMetadata] = useState<VideoMetadata | undefined>(undefined)
-  const [videoDuration, setVideoDuration] = useState(0) // Inicializar en 0, se actualizará con la duración real
+  const [videoDuration, setVideoDuration] = useState(0)
   const [currentTime, setCurrentTime] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
+  // const [selectedTextId, setSelectedTextId] = useState<string | undefined>(undefined) // Removed
+  const [isLoading, setIsLoading] = useState(false);
+  // const [showTextOverlays, setShowTextOverlays] = useState(false); // Removed
+  const [projectDuration, setProjectDuration] = useState(0); 
+  const [errorMessage, setErrorMessage] = useState<string | null>(null); 
 
   // Estados para biblioteca y timeline
   const [mediaLibrary, setMediaLibrary] = useState<MediaItem[]>([])
   const [timelineClips, setTimelineClips] = useState<TimelineClip[]>([])
+  // const [textOverlays, setTextOverlays] = useState<TextOverlay[]>([]) // Removed
 
   const getClipColor = (type: string, index: number) => {
     const colors = {
@@ -79,110 +86,132 @@ export default function VideoEditor() {
     return maxEndTime // No agregar buffer, usar la duración real de los clips
   }, [timelineClips, videoDuration])
 
-  // Calcular duración actual del proyecto
-  const projectDuration = calculateProjectDuration()
-
-  // Actualizar duración cuando cambien los clips (solo para efectos de UI, no sobrescribir videoDuration)
+  // Actualizar duración del proyecto cuando cambien los clips o la duración del video base
   useEffect(() => {
-    // Este efecto se mantiene para posibles actualizaciones futuras de UI
-    // pero ya no sobrescribe videoDuration
-  }, [timelineClips, calculateProjectDuration])
+    const newProjectDuration = calculateProjectDuration();
+    setProjectDuration(newProjectDuration);
+  }, [timelineClips, videoDuration, calculateProjectDuration, setProjectDuration]);
 
   const handleVideoUpload = useCallback((file: File) => {
-    setIsLoading(true)
-    setVideoFile(file)
+    setIsLoading(true);
+    setVideoFile(file);
+    setVideoMetadata(undefined); // Clear previous metadata, corrected to undefined
+    setVideoDuration(0);    // Reset duration
+    setProjectDuration(0);  // Reset project duration
+    setCurrentTime(0);      // Reset current time
+    setTimelineClips([]);   // Clear timeline
 
-    // Obtener metadata real del video
-    const video = document.createElement('video')
-    video.preload = 'metadata'
-    
-    video.onloadedmetadata = () => {
-      const realDuration = video.duration
-      console.log('Video metadata loaded:', {
+    const videoElement = document.createElement('video');
+    videoElement.preload = 'metadata';
+
+    const objectUrl = URL.createObjectURL(file);
+
+    const onMetadataLoaded = () => {
+      console.log('Video metadata loaded event triggered for:', file.name, 'Duration:', videoElement.duration);
+      const realDuration = videoElement.duration;
+
+      if (!isFinite(realDuration) || isNaN(realDuration) || realDuration <= 0) {
+        console.error('Invalid video duration after metadata loaded:', realDuration, 'for file:', file.name);
+        setErrorMessage(`Error: Duración de video inválida (${realDuration}) para ${file.name}`);
+        setIsLoading(false);
+        URL.revokeObjectURL(objectUrl); // Crucial: Revoke URL on error path
+        return;
+      }
+
+      const newMetadata: VideoMetadata = {
         filename: file.name,
         duration: realDuration,
-        isFinite: isFinite(realDuration),
-        isNaN: isNaN(realDuration)
-      })
-      
-      // Verificar que la duración sea válida
-      if (!isFinite(realDuration) || isNaN(realDuration) || realDuration <= 0) {
-        console.error('Invalid video duration:', realDuration)
-        setIsLoading(false)
-        return
-      }
-      
-      const realMetadata: VideoMetadata = {
-        filename: file.name,
-        duration: realDuration, // Duración real del video
-        fps: 30,
-        resolution: "1920x1080",
-        fileSize: file.size / (1024 * 1024), // Tamaño real en MB
-        codec: "H.264",
-        bitrate: 5000,
-        audioChannels: 2,
-        audioSampleRate: 48000,
-        createdAt: new Date().toLocaleDateString("es-ES"),
-      }
+        fps: 30, // Placeholder, consider extracting if possible
+        resolution: `${videoElement.videoWidth}x${videoElement.videoHeight}`,
+        fileSize: file.size / (1024 * 1024),
+        codec: 'N/A', // Placeholder
+        bitrate: 0, // Placeholder
+        audioChannels: 0, // Placeholder
+        audioSampleRate: 0, // Placeholder
+        createdAt: new Date().toLocaleDateString('es-ES'),
+      };
 
-      console.log('Setting video metadata:', realMetadata)
-      setVideoMetadata(realMetadata)
-      setVideoDuration(realDuration) // Establecer duración real
-      console.log('Video duration set to:', realDuration)
+      console.log('Setting video metadata:', newMetadata);
+      setVideoMetadata(newMetadata);
+      setVideoDuration(realDuration);
+      setProjectDuration(realDuration); // Initialize project duration with the first video's duration
+      setCurrentTime(0);
 
-      // Agregar el video a la biblioteca automáticamente
+      // Add to media library
       const newMediaItem: MediaItem = {
         id: `media_${Date.now()}`,
         name: file.name,
-        type: "video",
-        duration: realMetadata.duration,
-        thumbnail: "/placeholder.svg?height=60&width=80",
-        fileSize: realMetadata.fileSize,
-        dateAdded: new Date().toISOString().split("T")[0],
-        file: file,
-      }
+        type: 'video',
+        duration: realDuration,
+        thumbnail: '/placeholder.svg?height=60&width=80', // Placeholder, generate later if needed
+        fileSize: newMetadata.fileSize,
+        dateAdded: new Date().toISOString().split('T')[0],
+        file: file, // Store the actual file object if needed for direct use
+      };
+      setMediaLibrary((prev) => [...prev, newMediaItem]);
 
-      setMediaLibrary((prev) => [...prev, newMediaItem])
-
-      // Agregar automáticamente a la timeline en la primera pista de video
+      // Add to timeline
       const newClip: TimelineClip = {
         id: `clip_${Date.now()}`,
-        name: file.name,
-        type: "video",
-        startTime: 0,
-        duration: realMetadata.duration,
-        trackIndex: 0, // Primera pista de video
-        color: getClipColor("video", 0),
-        thumbnail: "/placeholder.svg?height=40&width=60",
         mediaId: newMediaItem.id,
+        name: file.name,
+        type: 'video',
+        startTime: 0,
+        duration: realDuration,
+        originalDuration: realDuration,
+        trackIndex: 0, // Default to first video track
+        color: getClipColor('video', 0),
+        thumbnail: '/placeholder.svg?height=40&width=60',
         locked: false,
         muted: false,
         visible: true,
-        originalDuration: realMetadata.duration,
         trimStart: 0,
-        trimEnd: realMetadata.duration,
-      }
-
-      setTimelineClips([newClip])
-      setIsLoading(false)
+        trimEnd: realDuration,
+      };
+      setTimelineClips([newClip]); // Replace timeline with this new clip for now
       
-      // Limpiar el objeto URL del video temporal
-      URL.revokeObjectURL(video.src)
-    }
+      setIsLoading(false);
+      URL.revokeObjectURL(objectUrl); // Revoke URL after successful processing
+      setErrorMessage(null); // Clear any previous error message
+    };
 
-    video.onerror = (error) => {
-      console.error('Error loading video metadata:', error)
-      setIsLoading(false)
-      URL.revokeObjectURL(video.src)
-    }
+    const onVideoError = (event: Event | string) => {
+      console.error('Error loading video:', file.name, event);
+      // Attempt to get more specific error from video element if possible
+      const videoError = videoElement.error;
+      let errorMessageText = `Error al cargar el video ${file.name}.`;
+      if (videoError) {
+        switch (videoError.code) {
+          case MediaError.MEDIA_ERR_ABORTED:
+            errorMessageText += ' Carga abortada.';
+            break;
+          case MediaError.MEDIA_ERR_NETWORK:
+            errorMessageText += ' Error de red.';
+            break;
+          case MediaError.MEDIA_ERR_DECODE:
+            errorMessageText += ' Error de decodificación.';
+            break;
+          case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
+            errorMessageText += ' Formato no soportado.';
+            break;
+          default:
+            errorMessageText += ' Error desconocido.';
+        }
+        console.error('MediaError details:', videoError.message, videoError.code);
+      }
+      setErrorMessage(errorMessageText);
+      setIsLoading(false);
+      URL.revokeObjectURL(objectUrl); // Crucial: Revoke URL on error path
+    };
 
-    video.oncanplay = () => {
-      console.log('Video can play, duration:', video.duration)
-    }
+    videoElement.addEventListener('loadedmetadata', onMetadataLoaded);
+    videoElement.addEventListener('error', onVideoError);
 
-    video.src = URL.createObjectURL(file)
-    console.log('Video src set, loading metadata...')
-  }, [])
+    videoElement.src = objectUrl;
+    // videoElement.load(); // Explicitly call load, though setting src usually triggers it.
+    console.log('Video src set, attempting to load metadata for:', file.name);
+
+  }, [setVideoFile, setIsLoading, setVideoMetadata, setVideoDuration, setProjectDuration, setCurrentTime, setMediaLibrary, setTimelineClips, getClipColor, setErrorMessage]); // Removed setShowTextOverlays from deps
 
   const handleSeekTo = useCallback((time: number) => {
     console.log('handleSeekTo called with time:', time)
@@ -441,22 +470,17 @@ export default function VideoEditor() {
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Video Upload/Player Area */}
-          <div className="flex-1 p-6 overflow-hidden">
+          <div className="flex-1 bg-black border border-gray-700 rounded-lg overflow-hidden">
             {!videoFile ? (
               <VideoUploadArea onVideoUpload={handleVideoUpload} />
-            ) : isLoading ? (
-              <div className="h-full flex items-center justify-center">
-                <div className="text-center space-y-4">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-                  <p className="text-white">Procesando video y extrayendo metadata...</p>
-                </div>
-              </div>
             ) : (
               <VideoPlayer
                 videoFile={videoFile}
-                isPlaying={isPlaying}
                 currentTime={currentTime}
+                isPlaying={isPlaying}
                 onTimeUpdate={setCurrentTime}
+                onPlayPause={setIsPlaying}
+                videoDuration={videoDuration} 
               />
             )}
           </div>

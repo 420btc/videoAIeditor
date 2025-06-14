@@ -1,23 +1,34 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Card } from "@/components/ui/card"
+// import { TextOverlayRenderer } from "./text-overlay-renderer" // Removed
+// import { TextOverlay } from "@/types/text-overlay" // Removed
 
 interface VideoPlayerProps {
-  videoFile: File
+  videoFile: File | null // Allow null for initial state
   isPlaying: boolean
   currentTime: number
   onTimeUpdate: (time: number) => void
+  videoDuration: number // Added from VideoEditor
 }
 
-export function VideoPlayer({ videoFile, isPlaying, currentTime, onTimeUpdate }: VideoPlayerProps) {
+export function VideoPlayer({ 
+  videoFile, 
+  isPlaying, 
+  currentTime, 
+  onTimeUpdate,
+  videoDuration
+}: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
-  const videoUrl = URL.createObjectURL(videoFile)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [videoDimensions, setVideoDimensions] = useState({ width: 0, height: 0 })
+  const [videoUrl, setVideoUrl] = useState<string | null>(null)
   const isSeekingRef = useRef(false)
 
   useEffect(() => {
     const video = videoRef.current
-    if (!video) return
+    if (!video || !videoUrl) return // Don't run if no video or no url
 
     const handleTimeUpdate = () => {
       if (!isSeekingRef.current) {
@@ -28,6 +39,11 @@ export function VideoPlayer({ videoFile, isPlaying, currentTime, onTimeUpdate }:
     const handleLoadedMetadata = () => {
       // Ensure video duration is properly set
       onTimeUpdate(0)
+      // Update video dimensions for text overlay positioning
+      setVideoDimensions({
+        width: video.videoWidth,
+        height: video.videoHeight
+      })
     }
 
     const handlePlay = () => {
@@ -64,8 +80,46 @@ export function VideoPlayer({ videoFile, isPlaying, currentTime, onTimeUpdate }:
   }, [onTimeUpdate])
 
   useEffect(() => {
+    if (videoFile) {
+      const newUrl = URL.createObjectURL(videoFile);
+      setVideoUrl(newUrl);
+      console.log("VideoPlayer: New object URL created:", newUrl, "for file:", videoFile.name);
+
+      return () => {
+        console.log("VideoPlayer: Revoking object URL:", newUrl);
+        URL.revokeObjectURL(newUrl);
+        setVideoUrl(null); // Clear the URL state
+      };
+    } else {
+      // If videoFile becomes null, revoke any existing URL and clear it
+      if (videoUrl) {
+        console.log("VideoPlayer: videoFile is null, revoking:", videoUrl);
+        URL.revokeObjectURL(videoUrl);
+        setVideoUrl(null);
+      }
+    }
+  }, [videoFile]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !videoUrl) return; // Don't run if no video or no url
+
+    // When videoUrl changes, update the src and load
+    video.src = videoUrl;
+    video.load(); // Explicitly load the new source
+    console.log("VideoPlayer: video.src set to", videoUrl, "and video.load() called");
+
+    // Attempt to play if isPlaying is true after src is set
+    if (isPlaying) {
+      video.play().catch(error => console.error("Error playing video on src change:", error));
+    }
+
+  }, [videoUrl]); // Depends on videoUrl now
+
+
+  useEffect(() => {
     const video = videoRef.current
-    if (!video) return
+    if (!video || !videoUrl) return // Don't run if no video or no url
 
     const playVideo = async () => {
       try {
@@ -101,15 +155,38 @@ export function VideoPlayer({ videoFile, isPlaying, currentTime, onTimeUpdate }:
     }
   }, [currentTime])
 
+  // Update container dimensions when video loads or resizes
+  useEffect(() => {
+    const updateDimensions = () => {
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect()
+        setVideoDimensions({
+          width: rect.width,
+          height: rect.height
+        })
+      }
+    }
+
+    updateDimensions()
+    window.addEventListener('resize', updateDimensions)
+    return () => window.removeEventListener('resize', updateDimensions)
+  }, [])
+
   return (
     <Card className="h-full bg-black border-gray-700 overflow-hidden">
-      <video 
-        ref={videoRef} 
-        src={videoUrl} 
-        className="w-full h-full object-contain" 
-        controls={false}
-        preload="metadata"
-      />
+      <div ref={containerRef} className="relative w-full h-full">
+        <video 
+          ref={videoRef} 
+          // src is now set via useEffect when videoUrl changes
+          className="w-full h-full object-contain" 
+          controls={false} // Consider adding controls for debugging if issues persist
+          preload="metadata"
+          // onLoadedData={() => console.log('VideoPlayer: onLoadedData event')} // Debugging event
+          // onError={(e) => console.error('VideoPlayer: video element error', e)} // Debugging event
+        />
+        
+        {/* Text Overlays Removed */}
+      </div>
     </Card>
   )
 }
