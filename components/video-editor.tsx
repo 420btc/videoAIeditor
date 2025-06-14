@@ -89,14 +89,19 @@ export default function VideoEditor() {
     setIsLoading(true)
     setVideoFile(file)
 
-    // Simular extracción de metadata del video
-    setTimeout(() => {
-      const mockMetadata: VideoMetadata = {
+    // Obtener metadata real del video
+    const video = document.createElement('video')
+    video.preload = 'metadata'
+    
+    video.onloadedmetadata = () => {
+      const realDuration = video.duration
+      
+      const realMetadata: VideoMetadata = {
         filename: file.name,
-        duration: 120, // 2 minutos
+        duration: realDuration, // Duración real del video
         fps: 30,
         resolution: "1920x1080",
-        fileSize: 45.2, // MB
+        fileSize: file.size / (1024 * 1024), // Tamaño real en MB
         codec: "H.264",
         bitrate: 5000,
         audioChannels: 2,
@@ -104,16 +109,17 @@ export default function VideoEditor() {
         createdAt: new Date().toLocaleDateString("es-ES"),
       }
 
-      setVideoMetadata(mockMetadata)
+      setVideoMetadata(realMetadata)
+      setVideoDuration(realDuration) // Establecer duración real
 
       // Agregar el video a la biblioteca automáticamente
       const newMediaItem: MediaItem = {
         id: `media_${Date.now()}`,
         name: file.name,
         type: "video",
-        duration: mockMetadata.duration,
+        duration: realMetadata.duration,
         thumbnail: "/placeholder.svg?height=60&width=80",
-        fileSize: mockMetadata.fileSize,
+        fileSize: realMetadata.fileSize,
         dateAdded: new Date().toISOString().split("T")[0],
         file: file,
       }
@@ -126,7 +132,7 @@ export default function VideoEditor() {
         name: file.name,
         type: "video",
         startTime: 0,
-        duration: mockMetadata.duration,
+        duration: realMetadata.duration,
         trackIndex: 0, // Primera pista de video
         color: getClipColor("video", 0),
         thumbnail: "/placeholder.svg?height=40&width=60",
@@ -134,14 +140,25 @@ export default function VideoEditor() {
         locked: false,
         muted: false,
         visible: true,
-        originalDuration: mockMetadata.duration,
+        originalDuration: realMetadata.duration,
         trimStart: 0,
-        trimEnd: mockMetadata.duration,
+        trimEnd: realMetadata.duration,
       }
 
       setTimelineClips([newClip])
       setIsLoading(false)
-    }, 1000)
+      
+      // Limpiar el objeto URL del video temporal
+      URL.revokeObjectURL(video.src)
+    }
+
+    video.onerror = () => {
+      console.error('Error loading video metadata')
+      setIsLoading(false)
+      URL.revokeObjectURL(video.src)
+    }
+
+    video.src = URL.createObjectURL(file)
   }, [])
 
   const handleSeekTo = useCallback((time: number) => {
