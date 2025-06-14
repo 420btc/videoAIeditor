@@ -117,7 +117,14 @@ export function MultiTrackTimeline({
   }
 
   const pixelsPerSecond = 5 * zoom
-  const timelineWidth = Math.max(duration * pixelsPerSecond, 800)
+  const calculateTimelineWidth = useCallback(() => {
+    if (clips.length === 0) return Math.max(duration, 800) // Usar la duración real del video o mínimo 800px
+    
+    const maxEndTime = Math.max(...clips.map((clip) => clip.startTime + clip.duration))
+    return Math.max(maxEndTime + 30, duration) // Usar la duración real del video
+  }, [clips, duration])
+
+  const timelineWidth = calculateTimelineWidth()
 
   const getClipWidth = (clipDuration: number) => clipDuration * pixelsPerSecond
   const getClipPosition = (startTime: number) => startTime * pixelsPerSecond
@@ -125,11 +132,11 @@ export function MultiTrackTimeline({
 
   // Calcular la duración real del proyecto basada en los clips
   const calculateProjectDuration = useCallback(() => {
-    if (clips.length === 0) return 120 // Duración mínima
+    if (clips.length === 0) return duration // Duración mínima
 
     const maxEndTime = Math.max(...clips.map((clip) => clip.startTime + clip.duration))
-    return Math.max(maxEndTime + 30, 120) // Agregar 30 segundos de buffer
-  }, [clips])
+    return Math.max(maxEndTime + 30, duration) // Agregar 30 segundos de buffer
+  }, [clips, duration])
 
   const allClips = clips // Use only real clips, no filler
 
@@ -314,7 +321,7 @@ export function MultiTrackTimeline({
   const renderTimeMarkers = () => {
     const markers = []
     const interval = zoom < 0.5 ? 30 : zoom < 1 ? 15 : zoom < 2 ? 10 : 5
-    const maxTime = Math.max(duration, 120)
+    const maxTime = Math.max(duration, timelineWidth / pixelsPerSecond)
 
     for (let i = 0; i <= maxTime; i += interval) {
       markers.push(

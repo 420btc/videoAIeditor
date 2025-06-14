@@ -53,7 +53,7 @@ interface TimelineClip {
 export default function VideoEditor() {
   const [videoFile, setVideoFile] = useState<File | null>(null)
   const [videoMetadata, setVideoMetadata] = useState<VideoMetadata | undefined>(undefined)
-  const [videoDuration, setVideoDuration] = useState(120) // Duración mínima por defecto
+  const [videoDuration, setVideoDuration] = useState(0) // Inicializar en 0, se actualizará con la duración real
   const [currentTime, setCurrentTime] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -73,11 +73,11 @@ export default function VideoEditor() {
 
   // Calcular duración del proyecto basada en clips
   const calculateProjectDuration = useCallback(() => {
-    if (timelineClips.length === 0) return 120
+    if (timelineClips.length === 0) return videoDuration
 
     const maxEndTime = Math.max(...timelineClips.map((clip) => clip.startTime + clip.duration))
-    return Math.max(maxEndTime + 30, 120) // Agregar 30 segundos de buffer
-  }, [timelineClips])
+    return Math.max(maxEndTime + 30, videoDuration) // Agregar 30 segundos de buffer
+  }, [timelineClips, videoDuration])
 
   // Actualizar duración cuando cambien los clips
   useEffect(() => {
