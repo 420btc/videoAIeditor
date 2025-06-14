@@ -10,7 +10,8 @@ interface VideoPlayerProps {
   isPlaying: boolean
   currentTime: number
   onTimeUpdate: (time: number) => void
-  videoDuration: number // Added from VideoEditor
+  onPlayPause: (playing: boolean) => void; // Added prop
+  videoDuration: number
 }
 
 export function VideoPlayer({ 

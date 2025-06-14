@@ -3,11 +3,11 @@ import { Button } from "@/components/ui/button"
 import { Video, Settings, CaseSensitive } from "lucide-react"
 
 interface NavbarProps {
-  showTextOverlays: boolean;
-  onToggleTextOverlays: () => void;
+  // showTextOverlays: boolean; // Removed
+  // onToggleTextOverlays: () => void; // Removed
 }
 
-export function Navbar({ showTextOverlays, onToggleTextOverlays }: NavbarProps) {
+export function Navbar({ }: NavbarProps) {
   return (
     <nav className="bg-black/50 backdrop-blur-sm border-b border-gray-800 px-6 py-4">
       <div className="flex items-center justify-between">
@@ -17,15 +17,6 @@ export function Navbar({ showTextOverlays, onToggleTextOverlays }: NavbarProps) 
         </div>
 
         <div className="flex items-center space-x-2">
-          <Button 
-            variant={showTextOverlays ? "secondary" : "ghost"} 
-            size="sm" 
-            className="text-gray-300 hover:text-white"
-            onClick={onToggleTextOverlays}
-          >
-            <CaseSensitive className="h-4 w-4 mr-2" />
-            Text Overlays
-          </Button>
           <Button variant="ghost" size="sm" className="text-gray-300 hover:text-white">
             <Settings className="h-4 w-4 mr-2" />
             Settings
