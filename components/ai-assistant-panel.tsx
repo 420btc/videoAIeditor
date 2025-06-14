@@ -54,13 +54,13 @@ export function AIAssistantPanel({ onAIAction }: AIAssistantPanelProps) {
   }
 
   // Cargar API key guardada al montar el componente
-  useState(() => {
+  useEffect(() => {
     const saved = localStorage.getItem("openai_api_key")
     if (saved) {
       setSavedApiKey(saved)
       setApiKey(saved)
     }
-  })
+  }, [])
 
   const renderMessage = (message: any) => {
     const isUser = message.role === "user"
