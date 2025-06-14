@@ -381,30 +381,30 @@ export default function VideoEditor() {
         }
         setTimelineClips(prev => [...prev, subtitleClip])
         break
-        
+
       case 'video_trimmed':
         // Update existing video clips to reflect trim
-        setTimelineClips(prev => prev.map(clip => {
-          if (clip.type === 'video' && clip.mediaId !== 'subtitle') {
+        setTimelineClips(prevClips => prevClips.map(clip => {
+          // Using original logic for identifying the clip to be trimmed
+          if (clip.type === 'video' && clip.mediaId !== 'subtitle') { 
             return {
               ...clip,
-              startTime: Math.max(0, clip.startTime - data.startTime),
+              startTime: Math.max(0, clip.startTime - data.startTime), 
               duration: Math.min(clip.duration, data.newDuration),
               trimStart: data.startTime,
               trimEnd: data.endTime,
-            }
+            };
           }
-          return clip
-        }))
-        // Update video duration
-        setVideoDuration(data.newDuration + 30)
-        if (videoMetadata) {
-          setVideoMetadata({
-            ...videoMetadata,
-            duration: data.newDuration
-          })
-        }
-        break
+          return clip;
+        }));
+        // Update video duration - removed +30
+        setVideoDuration(data.newDuration);
+        // Functional update for videoMetadata
+        setVideoMetadata(prevMetadata => {
+          if (!prevMetadata) return undefined;
+          return { ...prevMetadata, duration: data.newDuration };
+        });
+        break;
         
       case 'transition_added':
         // Add transition effect to timeline
@@ -418,9 +418,9 @@ export default function VideoEditor() {
           color: "bg-purple-600",
           mediaId: "transition",
           originalDuration: data.duration,
-        }
-        setTimelineClips(prev => [...prev, transitionClip])
-        break
+        };
+        setTimelineClips(prev => [...prev, transitionClip]);
+        break;
         
       case 'audio_adjusted':
         // Update audio clips or add audio effect indicator
@@ -451,21 +451,21 @@ export default function VideoEditor() {
       default:
         console.log('Unknown AI action:', action)
     }
-  }, [videoDuration, videoMetadata])
-
+  }, [videoFile?.name, setTimelineClips, setVideoDuration, setVideoMetadata, videoDuration]);
+  
   return (
-    <div className="h-screen flex flex-col overflow-hidden">
-      <Navbar />
+  <div className="h-screen flex flex-col overflow-hidden">
+    <Navbar />
 
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left Sidebar */}
-        <Sidebar
-          videoMetadata={videoMetadata}
-          onSeekTo={handleSeekTo}
-          mediaLibrary={mediaLibrary}
-          onDeleteMedia={handleDeleteMedia}
-          onImportMedia={handleImportMedia}
-        />
+    <div className="flex-1 flex overflow-hidden">
+      {/* Left Sidebar */}
+      <Sidebar
+        videoMetadata={videoMetadata}
+        onSeekTo={handleSeekTo}
+        mediaLibrary={mediaLibrary}
+        onDeleteMedia={handleDeleteMedia}
+        onImportMedia={handleImportMedia}
+      />
 
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
