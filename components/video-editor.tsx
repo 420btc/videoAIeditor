@@ -73,16 +73,19 @@ export default function VideoEditor() {
 
   // Calcular duración del proyecto basada en clips
   const calculateProjectDuration = useCallback(() => {
-    if (timelineClips.length === 0) return videoDuration
+    if (timelineClips.length === 0) return videoDuration || 0
 
     const maxEndTime = Math.max(...timelineClips.map((clip) => clip.startTime + clip.duration))
-    return Math.max(maxEndTime + 30, videoDuration) // Agregar 30 segundos de buffer
+    return maxEndTime // No agregar buffer, usar la duración real de los clips
   }, [timelineClips, videoDuration])
 
-  // Actualizar duración cuando cambien los clips
+  // Calcular duración actual del proyecto
+  const projectDuration = calculateProjectDuration()
+
+  // Actualizar duración cuando cambien los clips (solo para efectos de UI, no sobrescribir videoDuration)
   useEffect(() => {
-    const newDuration = calculateProjectDuration()
-    setVideoDuration(newDuration)
+    // Este efecto se mantiene para posibles actualizaciones futuras de UI
+    // pero ya no sobrescribe videoDuration
   }, [timelineClips, calculateProjectDuration])
 
   const handleVideoUpload = useCallback((file: File) => {
@@ -461,7 +464,7 @@ export default function VideoEditor() {
           {/* Multi-Track Timeline */}
           <div className="h-64 border-t border-gray-700 overflow-hidden">
             <MultiTrackTimeline
-              duration={videoDuration}
+              duration={projectDuration}
               currentTime={currentTime}
               isPlaying={isPlaying}
               onTimeChange={setCurrentTime}

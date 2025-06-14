@@ -380,7 +380,7 @@ export function MultiTrackTimeline({
             </Button>
 
             <div className="text-sm text-gray-400 font-mono">
-              {formatTime(currentTime)} / {formatTime(duration)}
+              {formatTime(currentTime)} / {formatTime(calculateProjectDuration())}
             </div>
           </div>
 
