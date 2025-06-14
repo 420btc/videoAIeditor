@@ -86,8 +86,16 @@ export function VideoPlayer({ videoFile, isPlaying, currentTime, onTimeUpdate }:
     const video = videoRef.current
     if (!video) return
 
+    console.log('VideoPlayer currentTime effect triggered:', {
+      currentTime,
+      videoCurrentTime: video.currentTime,
+      difference: Math.abs(video.currentTime - currentTime),
+      isSeekingRef: isSeekingRef.current
+    })
+
     // Only seek if the difference is significant and we're not already seeking
     if (!isSeekingRef.current && Math.abs(video.currentTime - currentTime) > 0.1) {
+      console.log('VideoPlayer seeking to:', currentTime)
       isSeekingRef.current = true
       video.currentTime = currentTime
     }

@@ -95,6 +95,19 @@ export default function VideoEditor() {
     
     video.onloadedmetadata = () => {
       const realDuration = video.duration
+      console.log('Video metadata loaded:', {
+        filename: file.name,
+        duration: realDuration,
+        isFinite: isFinite(realDuration),
+        isNaN: isNaN(realDuration)
+      })
+      
+      // Verificar que la duración sea válida
+      if (!isFinite(realDuration) || isNaN(realDuration) || realDuration <= 0) {
+        console.error('Invalid video duration:', realDuration)
+        setIsLoading(false)
+        return
+      }
       
       const realMetadata: VideoMetadata = {
         filename: file.name,
@@ -109,8 +122,10 @@ export default function VideoEditor() {
         createdAt: new Date().toLocaleDateString("es-ES"),
       }
 
+      console.log('Setting video metadata:', realMetadata)
       setVideoMetadata(realMetadata)
       setVideoDuration(realDuration) // Establecer duración real
+      console.log('Video duration set to:', realDuration)
 
       // Agregar el video a la biblioteca automáticamente
       const newMediaItem: MediaItem = {
@@ -152,17 +167,24 @@ export default function VideoEditor() {
       URL.revokeObjectURL(video.src)
     }
 
-    video.onerror = () => {
-      console.error('Error loading video metadata')
+    video.onerror = (error) => {
+      console.error('Error loading video metadata:', error)
       setIsLoading(false)
       URL.revokeObjectURL(video.src)
     }
 
+    video.oncanplay = () => {
+      console.log('Video can play, duration:', video.duration)
+    }
+
     video.src = URL.createObjectURL(file)
+    console.log('Video src set, loading metadata...')
   }, [])
 
   const handleSeekTo = useCallback((time: number) => {
+    console.log('handleSeekTo called with time:', time)
     setCurrentTime(time)
+    console.log('currentTime updated to:', time)
   }, [])
 
   const handleDeleteMedia = useCallback((mediaId: string) => {

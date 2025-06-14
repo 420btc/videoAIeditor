@@ -178,6 +178,7 @@ export function MultiTrackTimeline({
         const rect = timelineRef.current.getBoundingClientRect()
         const clickX = e.clientX - rect.left - 132 // Restar ancho del header
         const newTime = Math.max(0, Math.min(duration, getTimeFromPosition(clickX)))
+        console.log('MultiTrackTimeline handleTimelineClick - clicking to time:', newTime)
         onTimeChange(newTime)
       }
     },
@@ -213,6 +214,7 @@ export function MultiTrackTimeline({
         const timelineRect = timelineRef.current.getBoundingClientRect()
         const newX = e.clientX - timelineRect.left - 132 // Restar ancho del header
         const newTime = Math.max(0, Math.min(duration, getTimeFromPosition(newX)))
+        console.log('MultiTrackTimeline handleMouseMove - dragging playhead to time:', newTime)
         onTimeChange(newTime)
       }
 
