@@ -166,24 +166,18 @@ export default function VideoEditor() {
 
     const videoElement = document.createElement('video');
     videoElement.preload = 'metadata';
+    videoElement.muted = true; // Importante para WebM
 
     const objectUrl = URL.createObjectURL(file);
+    let metadataAttempts = 0;
+    const maxAttempts = 3;
 
-    const onMetadataLoaded = () => {
-      console.log('Video metadata loaded event triggered for:', file.name, 'Duration:', videoElement.duration);
-      const realDuration = videoElement.duration;
-
-      if (!isFinite(realDuration) || isNaN(realDuration) || realDuration <= 0) {
-        console.error('Invalid video duration after metadata loaded:', realDuration, 'for file:', file.name);
-        setErrorMessage(`Error: Duración de video inválida (${realDuration}) para ${file.name}`);
-        setIsLoading(false);
-        URL.revokeObjectURL(objectUrl); // Crucial: Revoke URL on error path
-        return;
-      }
-
+    const processVideoMetadata = (duration: number) => {
+      console.log('Processing video metadata for:', file.name, 'Duration:', duration);
+      
       const newMetadata: VideoMetadata = {
         filename: file.name,
-        duration: realDuration,
+        duration: duration,
         fps: 30, // Placeholder, consider extracting if possible
         resolution: `${videoElement.videoWidth}x${videoElement.videoHeight}`,
         fileSize: file.size / (1024 * 1024),
@@ -196,8 +190,8 @@ export default function VideoEditor() {
 
       console.log('Setting video metadata:', newMetadata);
       setVideoMetadata(newMetadata);
-      setVideoDuration(realDuration);
-      setProjectDuration(realDuration); // Initialize project duration with the first video's duration
+      setVideoDuration(duration);
+      setProjectDuration(duration); // Initialize project duration with the first video's duration
       setCurrentTime(0);
 
       // Add to media library
@@ -205,7 +199,7 @@ export default function VideoEditor() {
         id: `media_${Date.now()}`,
         name: file.name,
         type: 'video',
-        duration: realDuration,
+        duration: duration,
         thumbnail: '/placeholder.svg?height=60&width=80', // Placeholder, generate later if needed
         fileSize: newMetadata.fileSize,
         dateAdded: new Date().toISOString().split('T')[0],
@@ -220,8 +214,8 @@ export default function VideoEditor() {
         name: file.name,
         type: 'video',
         startTime: 0,
-        duration: realDuration,
-        originalDuration: realDuration,
+        duration: duration,
+        originalDuration: duration,
         trackIndex: 0, // Default to first video track
         color: getClipColor('video', 0),
         thumbnail: '/placeholder.svg?height=40&width=60',
@@ -229,7 +223,7 @@ export default function VideoEditor() {
         muted: false,
         visible: true,
         trimStart: 0,
-        trimEnd: realDuration,
+        trimEnd: duration,
       };
       setTimelineClips([newClip]); // Replace timeline with this new clip for now
       console.log('VideoEditor - Created new clip:', newClip);
@@ -243,43 +237,81 @@ export default function VideoEditor() {
       setErrorMessage(null); // Clear any previous error message
     };
 
-    const onVideoError = (event: Event | string) => {
-      console.error('Error loading video:', file.name, event);
-      // Attempt to get more specific error from video element if possible
-      const videoError = videoElement.error;
-      let errorMessageText = `Error al cargar el video ${file.name}.`;
-      if (videoError) {
-        switch (videoError.code) {
-          case MediaError.MEDIA_ERR_ABORTED:
-            errorMessageText += ' Carga abortada.';
-            break;
-          case MediaError.MEDIA_ERR_NETWORK:
-            errorMessageText += ' Error de red.';
-            break;
-          case MediaError.MEDIA_ERR_DECODE:
-            errorMessageText += ' Error de decodificación.';
-            break;
-          case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
-            errorMessageText += ' Formato no soportado.';
-            break;
-          default:
-            errorMessageText += ' Error desconocido.';
-        }
-        console.error('MediaError details:', videoError.message, videoError.code);
+    const tryGetDuration = () => {
+      const duration = videoElement.duration;
+      console.log(`Attempt ${metadataAttempts + 1}: Duration for ${file.name}:`, duration);
+      
+      if (isFinite(duration) && !isNaN(duration) && duration > 0) {
+        processVideoMetadata(duration);
+        return true;
       }
-      setErrorMessage(errorMessageText);
-      setIsLoading(false);
-      URL.revokeObjectURL(objectUrl); // Crucial: Revoke URL on error path
+      return false;
     };
 
-    videoElement.addEventListener('loadedmetadata', onMetadataLoaded);
-    videoElement.addEventListener('error', onVideoError);
+    const onMetadataLoaded = () => {
+      console.log('Video metadata loaded event triggered for:', file.name, 'Duration:', videoElement.duration);
+      
+      if (tryGetDuration()) {
+        return;
+      }
+      
+      // Para archivos WebM, a veces necesitamos esperar un poco más
+      if (file.name.toLowerCase().endsWith('.webm') && metadataAttempts < maxAttempts) {
+        metadataAttempts++;
+        console.log(`WebM file detected, retrying metadata load (attempt ${metadataAttempts})`);
+        
+        setTimeout(() => {
+          if (tryGetDuration()) {
+            return;
+          }
+          
+          // Último intento: forzar la carga del video
+          videoElement.currentTime = 0.1;
+          setTimeout(() => {
+            if (!tryGetDuration()) {
+              console.error('Invalid video duration after all attempts:', videoElement.duration, 'for file:', file.name);
+              setErrorMessage(`Error: No se pudo obtener la duración del video ${file.name}. Formato WebM puede no ser completamente compatible.`);
+              setIsLoading(false);
+              URL.revokeObjectURL(objectUrl);
+            }
+          }, 500);
+        }, 1000);
+      } else {
+        console.error('Invalid video duration after metadata loaded:', videoElement.duration, 'for file:', file.name);
+        setErrorMessage(`Error: Duración de video inválida (${videoElement.duration}) para ${file.name}`);
+        setIsLoading(false);
+        URL.revokeObjectURL(objectUrl); // Crucial: Revoke URL on error path
+      }
+    };
 
-    videoElement.src = objectUrl;
-    // videoElement.load(); // Explicitly call load, though setting src usually triggers it.
-    console.log('Video src set, attempting to load metadata for:', file.name);
+    const onCanPlay = () => {
+      console.log('Video canplay event triggered for:', file.name);
+      if (!isFinite(videoElement.duration) || isNaN(videoElement.duration) || videoElement.duration <= 0) {
+        tryGetDuration();
+      }
+    };
 
-  }, [setVideoFile, setIsLoading, setVideoMetadata, setVideoDuration, setProjectDuration, setCurrentTime, setMediaLibrary, setTimelineClips, getClipColor, setErrorMessage]); // Removed setShowTextOverlays from deps
+    const onDurationChange = () => {
+       console.log('Video durationchange event triggered for:', file.name, 'Duration:', videoElement.duration);
+       tryGetDuration();
+     };
+
+     const onError = (error: Event) => {
+       console.error('Error loading video:', file.name, error);
+       setErrorMessage(`Error al cargar el video: ${file.name}`);
+       setIsLoading(false);
+       URL.revokeObjectURL(objectUrl);
+     };
+
+     // Agregar múltiples event listeners para mejor compatibilidad con WebM
+     videoElement.addEventListener('loadedmetadata', onMetadataLoaded);
+     videoElement.addEventListener('canplay', onCanPlay);
+     videoElement.addEventListener('durationchange', onDurationChange);
+     videoElement.addEventListener('error', onError);
+
+     videoElement.src = objectUrl;
+     videoElement.load(); // Forzar la carga
+   }, []);
 
   const handleSeekTo = useCallback((time: number) => {
     console.log('handleSeekTo called with time:', time)
