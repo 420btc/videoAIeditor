@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from "react"
 import { Navbar } from "./navbar"
 import { VideoUploadArea } from "./video-upload-area"
 import { VideoPlayer } from "./video-player"
-import { MultiTrackTimeline } from "./multi-track-timeline"
+import MultiTrackTimeline from "./multi-track-timeline"
 import { Sidebar } from "./sidebar"
 import { AIAssistantPanel } from "./ai-assistant-panel"
 import { VideoDownload } from "./video-download"
@@ -171,6 +171,8 @@ export default function VideoEditor() {
         trimEnd: realDuration,
       };
       setTimelineClips([newClip]); // Replace timeline with this new clip for now
+      console.log('VideoEditor - Created new clip:', newClip);
+      console.log('VideoEditor - Timeline clips after setting:', [newClip]);
       
       setIsLoading(false);
       URL.revokeObjectURL(objectUrl); // Revoke URL after successful processing

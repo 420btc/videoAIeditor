@@ -79,7 +79,7 @@ interface MultiTrackTimelineProps {
   mediaLibrary: MediaItem[]
 }
 
-export function MultiTrackTimeline({
+export default function MultiTrackTimeline({
   duration,
   currentTime,
   isPlaying,
@@ -102,6 +102,12 @@ export function MultiTrackTimeline({
   const [cutMode, setCutMode] = useState(false)
   const [isDraggingPlayhead, setIsDraggingPlayhead] = useState(false)
   const timelineRef = useRef<HTMLDivElement>(null)
+
+  // Debug: Log clips when they change
+  useEffect(() => {
+    console.log('MultiTrackTimeline - clips updated:', clips)
+    console.log('MultiTrackTimeline - clips length:', clips.length)
+  }, [clips])
 
   const [tracks] = useState<Track[]>([
     { id: "v1", name: "Video 1", type: "video", height: 60, muted: false, visible: true, locked: false },
