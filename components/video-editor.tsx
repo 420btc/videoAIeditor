@@ -55,6 +55,7 @@ interface TimelineClip {
 
 export default function VideoEditor() {
   const [videoFile, setVideoFile] = useState<File | null>(null)
+  const [composedVideoFile, setComposedVideoFile] = useState<File | null>(null) // Video compuesto para reproducción
   const [videoMetadata, setVideoMetadata] = useState<VideoMetadata | undefined>(undefined)
   const [videoDuration, setVideoDuration] = useState(0)
   const [currentTime, setCurrentTime] = useState(0)
@@ -88,11 +89,71 @@ export default function VideoEditor() {
     return maxEndTime // No agregar buffer, usar la duración real de los clips
   }, [timelineClips, videoDuration])
 
+  // Función para componer el video basado en los clips del timeline
+  const composeTimelineVideo = useCallback(async () => {
+    if (timelineClips.length === 0 || !videoFile) {
+      setComposedVideoFile(videoFile)
+      return
+    }
+
+    try {
+      // Buscar el clip de video principal en el timeline
+      const mainVideoClip = timelineClips.find(clip => clip.type === 'video' && clip.trackIndex === 0)
+      
+      if (mainVideoClip) {
+        // Verificar si el clip tiene recortes aplicados
+        const hasTrims = mainVideoClip.trimStart !== undefined && 
+                        mainVideoClip.trimEnd !== undefined &&
+                        (mainVideoClip.trimStart > 0 || mainVideoClip.trimEnd < (mainVideoClip.originalDuration || videoDuration))
+        
+        if (hasTrims) {
+          console.log('Composing video with trims:', {
+            trimStart: mainVideoClip.trimStart,
+            trimEnd: mainVideoClip.trimEnd,
+            originalDuration: mainVideoClip.originalDuration
+          })
+          
+          // Crear una versión recortada del video
+          const { default: ffmpegService } = await import('../lib/ffmpeg-service')
+          await ffmpegService.load()
+          
+          const trimmedBlob = await ffmpegService.trimVideo(
+            videoFile, 
+            mainVideoClip.trimStart!, 
+            mainVideoClip.trimEnd!,
+            (progress) => console.log('Composing progress:', progress)
+          )
+          
+          const trimmedFile = new File([trimmedBlob], `composed_${videoFile.name}`, { type: videoFile.type })
+          setComposedVideoFile(trimmedFile)
+          console.log('Composed video created with trims')
+        } else {
+          // Si no hay recortes significativos, usar el video original
+          setComposedVideoFile(videoFile)
+          console.log('Using original video (no significant trims)')
+        }
+      } else {
+        // Si no hay clip de video principal, usar el video original
+        setComposedVideoFile(videoFile)
+        console.log('Using original video (no main video clip found)')
+      }
+    } catch (error) {
+      console.error('Error composing timeline video:', error)
+      // En caso de error, usar el video original
+      setComposedVideoFile(videoFile)
+    }
+  }, [timelineClips, videoFile, videoDuration])
+
   // Actualizar duración del proyecto cuando cambien los clips o la duración del video base
   useEffect(() => {
     const newProjectDuration = calculateProjectDuration();
     setProjectDuration(newProjectDuration);
   }, [timelineClips, videoDuration, calculateProjectDuration, setProjectDuration]);
+
+  // Componer el video cuando cambien los clips del timeline
+  useEffect(() => {
+    composeTimelineVideo();
+  }, [timelineClips, composeTimelineVideo]);
 
   const handleVideoUpload = useCallback((file: File) => {
     setIsLoading(true);
@@ -174,6 +235,9 @@ export default function VideoEditor() {
       console.log('VideoEditor - Created new clip:', newClip);
       console.log('VideoEditor - Timeline clips after setting:', [newClip]);
       
+      // Inicializar el video compuesto con el video original
+      setComposedVideoFile(file);
+      
       setIsLoading(false);
       URL.revokeObjectURL(objectUrl); // Revoke URL after successful processing
       setErrorMessage(null); // Clear any previous error message
@@ -236,6 +300,7 @@ export default function VideoEditor() {
     // Si el archivo eliminado es el video principal actual, quitar el video del reproductor
     if (mediaToDelete && mediaToDelete.file === videoFile) {
       setVideoFile(null);
+      setComposedVideoFile(null);
       setVideoMetadata(undefined);
       setVideoDuration(0);
       setProjectDuration(0);
@@ -260,6 +325,7 @@ export default function VideoEditor() {
       // Si no quedan clips de video principales, quitar el video del reproductor
       if (remainingMainVideoClips.length === 0) {
         setVideoFile(null);
+        setComposedVideoFile(null);
         setVideoMetadata(undefined);
         setVideoDuration(0);
         setProjectDuration(0);
@@ -447,6 +513,9 @@ export default function VideoEditor() {
       // Update the video file with the processed version
       setVideoFile(processedFile);
       
+      // También actualizar el video compuesto
+      setComposedVideoFile(processedFile);
+      
       // Update media library with processed file
       setMediaLibrary(prev => prev.map(item => 
         item.file === videoFile 
@@ -599,7 +668,7 @@ export default function VideoEditor() {
               <VideoUploadArea onVideoUpload={handleVideoUpload} />
             ) : (
               <VideoPlayer
-                videoFile={videoFile}
+                videoFile={composedVideoFile || videoFile}
                 currentTime={currentTime}
                 isPlaying={isPlaying}
                 onTimeUpdate={setCurrentTime}
