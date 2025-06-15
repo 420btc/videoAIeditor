@@ -4,6 +4,11 @@ import './globals.css'
 export const metadata: Metadata = {
   title: 'AI Video Editor',
   description: 'Video Editor with AI Assistant',
+  icons: {
+    icon: '/logoaivideo.png',
+    shortcut: '/logoaivideo.png',
+    apple: '/logoaivideo.png',
+  },
 }
 
 export default function RootLayout({
