@@ -103,19 +103,26 @@ export function VideoPlayer({
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || !videoUrl) return; // Don't run if no video or no url
+    if (!video) return;
 
-    // When videoUrl changes, update the src and load
-    video.src = videoUrl;
-    video.load(); // Explicitly load the new source
-    console.log("VideoPlayer: video.src set to", videoUrl, "and video.load() called");
+    if (videoUrl) {
+      // When videoUrl changes, update the src and load
+      video.src = videoUrl;
+      video.load(); // Explicitly load the new source
+      console.log("VideoPlayer: video.src set to", videoUrl, "and video.load() called");
 
-    // Attempt to play if isPlaying is true after src is set
-    if (isPlaying) {
-      video.play().catch(error => console.error("Error playing video on src change:", error));
+      // Attempt to play if isPlaying is true after src is set
+      if (isPlaying) {
+        video.play().catch(error => console.error("Error playing video on src change:", error));
+      }
+    } else {
+      // Clear video src when no videoUrl
+      video.src = "";
+      video.load();
+      console.log("VideoPlayer: video.src cleared and video.load() called");
     }
 
-  }, [videoUrl]); // Depends on videoUrl now
+  }, [videoUrl, isPlaying]); // Depends on videoUrl and isPlaying
 
 
   useEffect(() => {
@@ -176,15 +183,25 @@ export function VideoPlayer({
   return (
     <Card className="h-full bg-black border-gray-700 overflow-hidden">
       <div ref={containerRef} className="relative w-full h-full">
-        <video 
-          ref={videoRef} 
-          // src is now set via useEffect when videoUrl changes
-          className="w-full h-full object-contain" 
-          controls={false} // Consider adding controls for debugging if issues persist
-          preload="metadata"
-          // onLoadedData={() => console.log('VideoPlayer: onLoadedData event')} // Debugging event
-          // onError={(e) => console.error('VideoPlayer: video element error', e)} // Debugging event
-        />
+        {videoFile && videoUrl ? (
+          <video 
+            ref={videoRef} 
+            // src is now set via useEffect when videoUrl changes
+            className="w-full h-full object-contain" 
+            controls={false} // Consider adding controls for debugging if issues persist
+            preload="metadata"
+            // onLoadedData={() => console.log('VideoPlayer: onLoadedData event')} // Debugging event
+            // onError={(e) => console.error('VideoPlayer: video element error', e)} // Debugging event
+          />
+        ) : (
+          <div className="flex items-center justify-center w-full h-full text-gray-400">
+            <div className="text-center">
+              <div className="text-6xl mb-4">📹</div>
+              <p className="text-lg">No hay video cargado</p>
+              <p className="text-sm mt-2">Sube un video para comenzar a editar</p>
+            </div>
+          </div>
+        )}
         
         {/* Text Overlays Removed */}
       </div>

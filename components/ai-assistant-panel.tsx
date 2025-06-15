@@ -14,18 +14,46 @@ import { Bot, Send, Settings, ChevronDown, ChevronRight, Eye, EyeOff, Loader2, W
 
 interface AIAssistantPanelProps {
   onAIAction?: (action: string, data: any) => void
+  videoFile?: File | null
+  videoMetadata?: {
+    duration: number
+    width: number
+    height: number
+    fps: number
+    format: string
+  }
+  videoDuration?: number
+  currentTime?: number
 }
 
-export function AIAssistantPanel({ onAIAction }: AIAssistantPanelProps) {
+export function AIAssistantPanel({ onAIAction, videoFile, videoMetadata, videoDuration, currentTime }: AIAssistantPanelProps) {
   const [apiKey, setApiKey] = useState("")
   const [showApiKey, setShowApiKey] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [savedApiKey, setSavedApiKey] = useState("")
 
+  // Crear contexto del video para la IA
+  const getVideoContext = () => {
+    if (!videoFile) return null;
+    
+    return {
+      videoName: videoFile.name,
+      videoSize: `${(videoFile.size / (1024 * 1024)).toFixed(2)} MB`,
+      videoDuration: videoDuration ? `${videoDuration.toFixed(2)} segundos` : 'Desconocida',
+      currentTime: currentTime ? `${currentTime.toFixed(2)} segundos` : '0 segundos',
+      videoMetadata: videoMetadata ? {
+        resolution: `${videoMetadata.width}x${videoMetadata.height}`,
+        fps: `${videoMetadata.fps} fps`,
+        format: videoMetadata.format
+      } : null
+    };
+  };
+
   const { messages, input, handleInputChange, handleSubmit, isLoading, error } = useChat({
     api: "/api/chat",
     body: {
       apiKey: savedApiKey,
+      videoContext: getVideoContext(),
     },
     onError: (error) => {
       console.error("Chat error:", error)
@@ -178,7 +206,7 @@ export function AIAssistantPanel({ onAIAction }: AIAssistantPanelProps) {
   }, [messages, processToolResult])
 
   return (
-    <div className="w-96 bg-gray-900/30 border-l border-gray-800 flex flex-col h-full overflow-hidden">
+    <div className="w-full bg-gray-900/30 border-l border-gray-800 flex flex-col h-full overflow-hidden">
       {/* Header */}
       <div className="p-4 border-b border-gray-800 flex-shrink-0">
         <div className="flex items-center justify-between">
@@ -250,7 +278,7 @@ export function AIAssistantPanel({ onAIAction }: AIAssistantPanelProps) {
       )}
 
       {/* Chat Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-3 space-y-3">
         {messages.length === 0 ? (
           <div className="text-center text-gray-400 py-8">
             <Bot className="h-12 w-12 mx-auto mb-4 opacity-50" />
@@ -261,7 +289,7 @@ export function AIAssistantPanel({ onAIAction }: AIAssistantPanelProps) {
           messages.map((message) => (
             <div key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
               <div
-                className={`max-w-[80%] rounded-lg p-3 ${
+                className={`max-w-[90%] rounded-lg p-2 text-sm ${
                   message.role === "user"
                     ? "bg-blue-600 text-white"
                     : "bg-gray-700 text-gray-100"
@@ -271,7 +299,7 @@ export function AIAssistantPanel({ onAIAction }: AIAssistantPanelProps) {
                   {message.role === "assistant" && <Bot className="h-4 w-4 mt-0.5 flex-shrink-0" />}
                   {message.role === "user" && <Bot className="h-4 w-4 mt-0.5 flex-shrink-0" />}
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
+                    <p className="text-xs whitespace-pre-wrap break-words">{message.content}</p>
                     
                     {/* Tool Invocations */}
                     {message.toolInvocations && message.toolInvocations.length > 0 && (
@@ -302,11 +330,11 @@ export function AIAssistantPanel({ onAIAction }: AIAssistantPanelProps) {
         )}
         {isLoading && (
           <div className="flex justify-start">
-            <div className="bg-gray-700 text-gray-100 rounded-lg p-3 max-w-[80%]">
+            <div className="bg-gray-700 text-gray-100 rounded-lg p-2 max-w-[90%]">
               <div className="flex items-center space-x-2">
-                <Bot className="h-4 w-4" />
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="text-sm">Procesando...</span>
+                <Bot className="h-3 w-3" />
+                <Loader2 className="h-3 w-3 animate-spin" />
+                <span className="text-xs">Procesando...</span>
               </div>
             </div>
           </div>
@@ -314,7 +342,7 @@ export function AIAssistantPanel({ onAIAction }: AIAssistantPanelProps) {
       </div>
 
       {/* Input Area */}
-      <div className="p-4 border-t border-gray-800 flex-shrink-0">
+      <div className="p-3 border-t border-gray-800 flex-shrink-0">
         {!savedApiKey ? (
           <div className="text-center">
             <Button

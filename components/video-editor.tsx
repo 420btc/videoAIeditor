@@ -7,6 +7,7 @@ import { VideoPlayer } from "./video-player"
 import { MultiTrackTimeline } from "./multi-track-timeline"
 import { Sidebar } from "./sidebar"
 import { AIAssistantPanel } from "./ai-assistant-panel"
+import { VideoDownload } from "./video-download"
 // import { TextOverlayPanel } from "./text-overlay-panel" // Removed
 // import { TextOverlay } from "@/types/text-overlay" // Removed
 
@@ -62,7 +63,8 @@ export default function VideoEditor() {
   const [isLoading, setIsLoading] = useState(false);
   // const [showTextOverlays, setShowTextOverlays] = useState(false); // Removed
   const [projectDuration, setProjectDuration] = useState(0); 
-  const [errorMessage, setErrorMessage] = useState<string | null>(null); 
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [ffmpegProgress, setFfmpegProgress] = useState(0); 
 
   // Estados para biblioteca y timeline
   const [mediaLibrary, setMediaLibrary] = useState<MediaItem[]>([])
@@ -220,16 +222,50 @@ export default function VideoEditor() {
   }, [])
 
   const handleDeleteMedia = useCallback((mediaId: string) => {
+    // Encontrar el archivo que se va a eliminar
+    const mediaToDelete = mediaLibrary.find(item => item.id === mediaId);
+    
     // Eliminar de la biblioteca
     setMediaLibrary((prev) => prev.filter((item) => item.id !== mediaId))
 
     // Eliminar todos los clips de la timeline que usen este archivo
     setTimelineClips((prev) => prev.filter((clip) => clip.mediaId !== mediaId))
-  }, [])
+    
+    // Si el archivo eliminado es el video principal actual, quitar el video del reproductor
+    if (mediaToDelete && mediaToDelete.file === videoFile) {
+      setVideoFile(null);
+      setVideoMetadata(undefined);
+      setVideoDuration(0);
+      setProjectDuration(0);
+      setCurrentTime(0);
+      setIsPlaying(false);
+    }
+  }, [mediaLibrary, videoFile])
 
   const handleDeleteClip = useCallback((clipId: string) => {
+    // Encontrar el clip que se va a eliminar
+    const clipToDelete = timelineClips.find(clip => clip.id === clipId);
+    
+    // Eliminar el clip de la timeline
     setTimelineClips((prev) => prev.filter((clip) => clip.id !== clipId))
-  }, [])
+    
+    // Si el clip eliminado es el video principal (trackIndex 0 y tipo video), verificar si queda algún video principal
+    if (clipToDelete && clipToDelete.type === 'video' && clipToDelete.trackIndex === 0) {
+      const remainingMainVideoClips = timelineClips.filter(clip => 
+        clip.id !== clipId && clip.type === 'video' && clip.trackIndex === 0
+      );
+      
+      // Si no quedan clips de video principales, quitar el video del reproductor
+      if (remainingMainVideoClips.length === 0) {
+        setVideoFile(null);
+        setVideoMetadata(undefined);
+        setVideoDuration(0);
+        setProjectDuration(0);
+        setCurrentTime(0);
+        setIsPlaying(false);
+      }
+    }
+  }, [timelineClips])
 
   const handleImportMedia = useCallback(() => {
     // Crear un input file temporal
@@ -361,43 +397,120 @@ export default function VideoEditor() {
     })
   }, [])
 
-  // AI Action Handler - processes AI editing commands
-  const handleAIAction = useCallback((action: string, data: any) => {
-    console.log('Processing AI action:', action, data)
-    
-    switch (action) {
-      case 'subtitle_added':
-        // Add subtitle to timeline
-        const subtitleClip: TimelineClip = {
-          id: `subtitle_${Date.now()}`,
-          name: `Subtitle: "${data.text}"`,
-          type: "video",
-          startTime: data.startTime,
-          duration: data.endTime - data.startTime,
-          trackIndex: 2, // Use a subtitle track
-          color: "bg-yellow-600",
-          mediaId: "subtitle",
-          originalDuration: data.endTime - data.startTime,
-        }
-        setTimelineClips(prev => [...prev, subtitleClip])
-        break
+  // Process video with FFmpeg in frontend
+  const processVideoWithFFmpeg = useCallback(async (action: string, data: any) => {
+    if (!videoFile) return;
 
-      case 'video_trimmed':
-        // Update existing video clips to reflect trim
-        setTimelineClips(prevClips => prevClips.map(clip => {
-          // Using original logic for identifying the clip to be trimmed
-          if (clip.type === 'video' && clip.mediaId !== 'subtitle') { 
-            return {
-              ...clip,
-              startTime: Math.max(0, clip.startTime - data.startTime), 
-              duration: Math.min(clip.duration, data.newDuration),
-              trimStart: data.startTime,
-              trimEnd: data.endTime,
+    try {
+      setIsLoading(true);
+      setFfmpegProgress(0);
+      
+      // Dynamically import FFmpeg service to avoid SSR issues
+      const { default: ffmpegService } = await import('../lib/ffmpeg-service');
+      
+      // Load FFmpeg if not already loaded
+      await ffmpegService.load();
+      
+      // Progress callback
+      const onProgress = (progress: number) => {
+        setFfmpegProgress(progress);
+      };
+      
+      let processedBlob: Blob;
+      
+      switch (action) {
+        case 'video_trimmed':
+          processedBlob = await ffmpegService.trimVideo(videoFile, data.startTime, data.endTime, onProgress);
+          break;
+        case 'audio_adjusted':
+          const volumeLevel = data.action === 'volume' ? (data.value / 100) : 
+                             data.action === 'increase' ? 1.5 : 
+                             data.action === 'decrease' ? 0.5 : 1.0;
+          processedBlob = await ffmpegService.adjustAudio(videoFile, volumeLevel, onProgress);
+          break;
+        case 'subtitle_added':
+          const subtitles = [{
+            start: data.startTime,
+            end: data.endTime,
+            text: data.text
+          }];
+          processedBlob = await ffmpegService.addSubtitles(videoFile, subtitles, onProgress);
+          break;
+        default:
+          return; // No processing needed
+      }
+
+      const processedFile = new File([processedBlob], `processed_${videoFile.name}`, { type: videoFile.type });
+      
+      // Update the video file with the processed version
+      setVideoFile(processedFile);
+      
+      // Update media library with processed file
+      setMediaLibrary(prev => prev.map(item => 
+        item.file === videoFile 
+          ? { ...item, file: processedFile, name: processedFile.name }
+          : item
+      ));
+      
+      // Update timeline clips that reference the original video
+      setTimelineClips(prev => prev.map(clip => {
+          // Find the media item that matches this clip
+          const mediaItem = mediaLibrary.find(media => media.id === clip.mediaId);
+          if (mediaItem && mediaItem.file === videoFile) {
+            return { 
+              ...clip, 
+              name: processedFile.name,
+              // Update duration if it's the main video clip and action was trim
+              duration: action === 'video_trimmed' && clip.trackIndex === 0 ? data.newDuration : clip.duration,
+              originalDuration: action === 'video_trimmed' && clip.trackIndex === 0 ? data.newDuration : clip.originalDuration
             };
           }
           return clip;
         }));
-        // Update video duration - removed +30
+        
+        // Reset player state
+        setCurrentTime(0);
+        setIsPlaying(false);
+        
+        console.log('Video processed successfully with FFmpeg');
+        
+    } catch (error) {
+      console.error('Error processing video with FFmpeg:', error);
+      setErrorMessage('Error al procesar el video con FFmpeg');
+    } finally {
+      setIsLoading(false);
+      setFfmpegProgress(0);
+    }
+  }, [videoFile, setVideoFile, setMediaLibrary, mediaLibrary, setTimelineClips, setCurrentTime, setIsPlaying, setIsLoading, setErrorMessage]);
+
+  // AI Action Handler - processes AI editing commands
+  const handleAIAction = useCallback(async (action: string, data: any) => {
+    console.log('AI Action received:', action, data);
+    
+    // Process video with FFmpeg for actions that modify the video file
+    if (['video_trimmed', 'audio_adjusted', 'subtitle_added'].includes(action)) {
+      await processVideoWithFFmpeg(action, data);
+    }
+    
+    switch (action) {
+      case 'subtitle_added':
+        // Add subtitle to timeline as a text overlay
+        const subtitleClip: TimelineClip = {
+          id: `subtitle_${Date.now()}`,
+          name: `Subtitle: ${data.text.substring(0, 20)}...`,
+          type: "video", // Using video type for text overlays
+          startTime: data.startTime,
+          duration: data.endTime - data.startTime,
+          trackIndex: 2, // Use text track
+          color: "bg-yellow-600",
+          mediaId: "subtitle",
+          originalDuration: data.endTime - data.startTime,
+        };
+        setTimelineClips(prev => [...prev, subtitleClip]);
+        break;
+        
+      case 'video_trimmed':
+        // Update video duration and metadata
         setVideoDuration(data.newDuration);
         // Functional update for videoMetadata
         setVideoMetadata(prevMetadata => {
@@ -420,6 +533,9 @@ export default function VideoEditor() {
           originalDuration: data.duration,
         };
         setTimelineClips(prev => [...prev, transitionClip]);
+        // Reset video player to beginning after AI edit
+        setCurrentTime(0);
+        setIsPlaying(false);
         break;
         
       case 'audio_adjusted':
@@ -441,17 +557,23 @@ export default function VideoEditor() {
       case 'thumbnail_generated':
         // Update video metadata or show notification
         console.log('Thumbnail generated:', data.url)
+        // Reset video player to beginning after AI edit
+        setCurrentTime(0);
+        setIsPlaying(false);
         break
         
       case 'video_analyzed':
         // Process analysis results - could add markers to timeline
         console.log('Video analysis completed:', data.results)
+        // Reset video player to beginning after AI edit
+        setCurrentTime(0);
+        setIsPlaying(false);
         break
         
       default:
         console.log('Unknown AI action:', action)
     }
-  }, [videoFile?.name, setTimelineClips, setVideoDuration, setVideoMetadata, videoDuration]);
+  }, [videoFile, setTimelineClips, setVideoDuration, setVideoMetadata, videoDuration, setIsLoading, setErrorMessage, setVideoFile, setCurrentTime, setIsPlaying, setMediaLibrary, mediaLibrary]);
   
   return (
   <div className="h-screen flex flex-col overflow-hidden">
@@ -506,7 +628,25 @@ export default function VideoEditor() {
         </div>
 
         {/* Right AI Assistant Panel */}
-        <AIAssistantPanel onAIAction={handleAIAction} />
+        <div className="flex flex-col w-72 max-w-72">
+          <div className="flex-1 min-h-0">
+            <AIAssistantPanel 
+              onAIAction={handleAIAction}
+              videoFile={videoFile}
+              videoDuration={videoDuration}
+              currentTime={currentTime}
+            />
+          </div>
+          
+          {/* Video Download Panel */}
+          <div className="mt-2 flex-shrink-0">
+            <VideoDownload 
+              videoFile={videoFile}
+              isProcessing={isLoading}
+              processingProgress={ffmpegProgress}
+            />
+          </div>
+        </div>
       </div>
     </div>
   )

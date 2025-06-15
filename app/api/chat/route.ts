@@ -13,14 +13,15 @@ const videoEditingTools = {
       position: z.enum(['top', 'center', 'bottom']).describe('Position of the subtitle')
     }),
     execute: async ({ text, startTime, endTime, position }) => {
-      await new Promise(resolve => setTimeout(resolve, 500))
+      // This will trigger the real video processing in the frontend
       return {
         success: true,
         text,
         startTime,
         endTime,
         position,
-        message: `Subtitle "${text}" added from ${startTime}s to ${endTime}s at ${position} position`
+        message: `Subtitle "${text}" added from ${startTime}s to ${endTime}s at ${position} position`,
+        requiresProcessing: true // Flag to indicate this needs real processing
       }
     }
   }),
@@ -32,13 +33,14 @@ const videoEditingTools = {
       endTime: z.number().describe('End time in seconds for the trim')
     }),
     execute: async ({ startTime, endTime }) => {
-      await new Promise(resolve => setTimeout(resolve, 800))
+      // This will trigger the real video processing in the frontend
       return {
         success: true,
         startTime,
         endTime,
         newDuration: endTime - startTime,
-        message: `Video trimmed from ${startTime}s to ${endTime}s (duration: ${endTime - startTime}s)`
+        message: `Video trimmed from ${startTime}s to ${endTime}s (duration: ${endTime - startTime}s)`,
+        requiresProcessing: true // Flag to indicate this needs real processing
       }
     }
   }),
@@ -71,14 +73,15 @@ const videoEditingTools = {
       endTime: z.number().optional().describe('End time for the adjustment')
     }),
     execute: async ({ action, value, startTime, endTime }) => {
-      await new Promise(resolve => setTimeout(resolve, 700))
+      // This will trigger the real video processing in the frontend
       return {
         success: true,
         action,
         value,
         startTime: startTime || 0,
         endTime: endTime || 0,
-        message: `Audio ${action} adjusted to ${value}${startTime ? ` from ${startTime}s to ${endTime}s` : ''}`
+        message: `Audio ${action} adjusted to ${value}${startTime ? ` from ${startTime}s to ${endTime}s` : ''}`,
+        requiresProcessing: true // Flag to indicate this needs real processing
       }
     }
   }),
@@ -131,7 +134,7 @@ export async function POST(req: Request) {
       setTimeout(() => reject(new Error('Request timeout')), 25000) // 25 second timeout
     })
 
-    const { messages, apiKey } = await req.json()
+    const { messages, apiKey, videoContext } = await req.json()
 
     if (!apiKey) {
       return Response.json({ error: "OpenAI API key is required" }, { status: 400 })
@@ -147,6 +150,18 @@ export async function POST(req: Request) {
       tools: videoEditingTools,
       system: `You are an AI video editing assistant with access to professional video editing tools. 
 
+${videoContext ? `CURRENT VIDEO INFORMATION:
+- Video Name: ${videoContext.videoName}
+- File Size: ${videoContext.videoSize}
+- Duration: ${videoContext.videoDuration}
+- Current Time: ${videoContext.currentTime}
+${videoContext.videoMetadata ? `- Resolution: ${videoContext.videoMetadata.resolution}
+- Frame Rate: ${videoContext.videoMetadata.fps}
+- Format: ${videoContext.videoMetadata.format}` : ''}
+
+IMPORTANT: You are currently working with this video. When the user asks for edits like "cut the video in two parts" or "trim the video", you should be proactive and suggest reasonable cut points based on the video duration. For example, if the video is 60 seconds long, you could suggest cutting it at 30 seconds to create two equal parts. Don't ask for specific timestamps unless the user wants a custom cut point.
+
+` : ''}
 You can help users with:
 - Adding subtitles and captions
 - Trimming and cutting video segments  
