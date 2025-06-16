@@ -381,7 +381,7 @@ export default function VideoEditor() {
           const fileType = file.type.startsWith("video/") ? "video" : file.type.startsWith("audio/") ? "audio" : "image"
 
           const newMediaItem: MediaItem = {
-            id: `media_${Date.now()}_${Math.random()}`,
+            id: `media_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`,
             name: file.name,
             type: fileType,
             duration: fileType === "image" ? 5 : 60, // 5 segundos para imágenes, 60 para audio

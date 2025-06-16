@@ -89,7 +89,9 @@ router.post('/trim', upload.single('videoFile'), async (req: Request, res: Respo
     }
 
     const { startTime, endTime } = req.body;
-    if (!startTime || !endTime || isNaN(parseFloat(startTime)) || isNaN(parseFloat(endTime))) {
+    const start = parseFloat(startTime);
+    const end = parseFloat(endTime);
+    if (!startTime || !endTime || isNaN(start) || isNaN(end) || end <= start) {
       fs.unlinkSync(req.file.path);
       return res.status(400).json({ success: false, error: 'Invalid or missing startTime/endTime.' });
     }
@@ -102,8 +104,8 @@ router.post('/trim', upload.single('videoFile'), async (req: Request, res: Respo
 
     const trimmedVideoPath = await trimVideo(
       videoPath,
-      parseFloat(startTime),
-      parseFloat(endTime),
+      start,
+      end,
       outputDir,
       outputFilename
     );

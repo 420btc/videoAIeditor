@@ -176,7 +176,7 @@ export const addSubtitles = (
             fontsize: 24,
             fontcolor: 'white',
             x: '(w-text_w)/2',
-            y: 'h-th-20',
+            y: 'h-text_h-20',
             enable: `between(t,${startTime},${endTime})`
           }
         }

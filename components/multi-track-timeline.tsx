@@ -102,13 +102,8 @@ export default function MultiTrackTimeline({
   const [cutMode, setCutMode] = useState(false)
   const [isDraggingPlayhead, setIsDraggingPlayhead] = useState(false)
   const timelineRef = useRef<HTMLDivElement>(null)
-
-  // Debug: Log clips when they change
-  useEffect(() => {
-    console.log('MultiTrackTimeline - clips updated:', clips)
-    console.log('MultiTrackTimeline - clips length:', clips.length)
-  }, [clips])
-
+  const playheadRef = useRef<HTMLDivElement>(null)
+  
   const [tracks] = useState<Track[]>([
     { id: "v1", name: "Video 1", type: "video", height: 60, muted: false, visible: true, locked: false },
     { id: "v2", name: "Video 2", type: "video", height: 60, muted: false, visible: true, locked: false },
@@ -123,6 +118,19 @@ export default function MultiTrackTimeline({
   }
 
   const pixelsPerSecond = 5 * zoom
+  
+  // Keep playhead in sync with currentTime
+  useEffect(() => {
+    if (playheadRef.current) {
+      playheadRef.current.style.transform = `translateX(${currentTime * pixelsPerSecond}px)`
+    }
+  }, [currentTime, pixelsPerSecond])
+
+  // Debug: Log clips when they change
+  useEffect(() => {
+    console.log('MultiTrackTimeline - clips updated:', clips)
+    console.log('MultiTrackTimeline - clips length:', clips.length)
+  }, [clips])
   const calculateTimelineWidth = useCallback(() => {
     if (clips.length === 0) return Math.max(duration, 800) // Usar la duración real del video o mínimo 800px
     
@@ -343,12 +351,15 @@ export default function MultiTrackTimeline({
     return markers
   }
 
+
+
   const renderPlayhead = () => (
     <div
+      ref={playheadRef}
       className={`absolute top-0 bottom-0 w-0.5 bg-red-500 z-30 ${
         isDraggingPlayhead ? "cursor-grabbing" : "cursor-grab"
       }`}
-      style={{ left: `${currentTime * pixelsPerSecond}px` }}
+      style={{ transform: `translateX(${currentTime * pixelsPerSecond}px)` }}
       onMouseDown={handlePlayheadMouseDown}
     >
       <div className="absolute -top-2 -left-2 w-4 h-4 bg-red-500 rotate-45 transform origin-center cursor-grab"></div>
